@@ -8,7 +8,7 @@ import numpy as np
 
 BEACON_PORT = 5006       # where receiver broadcasts its presence
 STREAM_PORT = 5005       # port to send fragmented frames to (same as receiver STREAM_PORT)
-CAMERA_INDEX = 1
+CAMERA_INDEX = 0
 JPEG_QUALITY = 80
 CHUNK_SIZE = 60000
 FPS = 15
