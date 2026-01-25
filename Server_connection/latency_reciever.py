@@ -1,5 +1,5 @@
 """
-WebRTC Latency Test - RECEIVER (Computer 2)
+WebRTC Latency Test - RECEIVER (Computer 2) - OPTIMIZED
 
 Install dependencies first:
 pip install aiortc aiohttp
@@ -10,7 +10,7 @@ python receiver.py --remote-host <SENDER_IP> --remote-port 8080
 
 import asyncio
 import logging
-from aiortc import RTCPeerConnection, RTCSessionDescription
+from aiortc import RTCPeerConnection, RTCSessionDescription, RTCConfiguration
 import aiohttp
 
 logging.basicConfig(level=logging.INFO)
@@ -19,7 +19,9 @@ logger = logging.getLogger(__name__)
 
 class WebRTCReceiver:
     def __init__(self):
-        self.pc = RTCPeerConnection()
+        # Configure for local network - no STUN/TURN needed
+        config = RTCConfiguration(iceServers=[])
+        self.pc = RTCPeerConnection(configuration=config)
         self.channel = None
         self.ping_count = 0
         
@@ -36,7 +38,10 @@ class WebRTCReceiver:
             self.setup_channel_handlers()
         
         await self.pc.setLocalDescription(await self.pc.createAnswer())
-        await asyncio.sleep(0.1)
+        
+        # Wait for ICE gathering
+        while self.pc.iceGatheringState != "complete":
+            await asyncio.sleep(0.01)
         
         return {
             "sdp": self.pc.localDescription.sdp,
@@ -48,16 +53,24 @@ class WebRTCReceiver:
         @self.channel.on("open")
         def on_open():
             logger.info("✓ Data channel opened - Connection established!")
-            logger.info("Ready to receive pings and respond with pongs...\n")
+            logger.info("Ready to receive pings and respond immediately...\n")
         
         @self.channel.on("message")
         def on_message(message):
             if message.startswith("ping:"):
-                # Echo back the ping as pong
-                seq = message.split(":")[1]
+                # Respond immediately with minimal processing
                 self.ping_count += 1
-                logger.info(f"Received ping {seq} → Sending pong {seq}")
-                self.channel.send(message.replace("ping:", "pong:"))
+                pong_message = message.replace("ping:", "pong:")
+                
+                try:
+                    self.channel.send(pong_message)
+                except Exception as e:
+                    logger.error(f"Failed to send pong: {e}")
+                
+                # Only log every 10th ping to reduce overhead
+                if self.ping_count % 10 == 0:
+                    seq = message.split(":")[1]
+                    logger.info(f"Processed {self.ping_count} pings (latest: {seq})")
         
         @self.channel.on("close")
         def on_close():
@@ -68,7 +81,7 @@ class WebRTCReceiver:
 async def main(remote_host, remote_port):
     """Main function to run receiver"""
     logger.info("="*60)
-    logger.info("📡 RECEIVER - WebRTC Latency Test")
+    logger.info("📡 RECEIVER - WebRTC Latency Test (OPTIMIZED)")
     logger.info("="*60)
     logger.info(f"Connecting to sender at {remote_host}:{remote_port}...\n")
     
@@ -123,7 +136,7 @@ async def main(remote_host, remote_port):
 if __name__ == "__main__":
     import argparse
     
-    parser = argparse.ArgumentParser(description="WebRTC Latency Test - Receiver")
+    parser = argparse.ArgumentParser(description="WebRTC Latency Test - Receiver (Optimized)")
     parser.add_argument("--remote-host", required=True,
                        help="IP address of the sender computer")
     parser.add_argument("--remote-port", type=int, default=8080,
