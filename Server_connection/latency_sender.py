@@ -1,15 +1,11 @@
+
 import asyncio
 import json
 import time
-from aiohttp import ClientSession
-from aiortc import RTCPeerConnection, RTCDataChannel, RTCConfiguration, RTCIceServer, RTCSessionDescription
+from aiohttp import web
+from aiortc import RTCPeerConnection, RTCSessionDescription
 
-# STUN server config
-pc = RTCPeerConnection(
-    configuration=RTCConfiguration(
-        iceServers=[RTCIceServer(urls="stun:stun.l.google.com:19302")]
-    )
-)
+pc = RTCPeerConnection()
 
 channel = pc.createDataChannel(
     "latency",
@@ -19,11 +15,11 @@ channel = pc.createDataChannel(
 
 @channel.on("open")
 async def on_open():
-    print("Latency channel open. Starting pings...")
+    print("Latency channel open")
     while True:
         t0 = time.time()
-        msg = json.dumps({"t0": t0})
-        channel.send(msg)
+        msg = {"t0": t0}
+        channel.send(json.dumps(msg))
         await asyncio.sleep(0.1)  # 10 Hz ping
 
 @channel.on("message")
@@ -33,22 +29,23 @@ def on_message(message):
     rtt = (time.time() - t0) * 1000
     print(f"RTT: {rtt:.2f} ms | One-way ≈ {rtt/2:.2f} ms")
 
-async def main():
-    server_ip = "192.168.68.59" # <-- Replace with your server's LAN IP
-    async with ClientSession() as session:
-        # Send initial offer
-        offer = await pc.createOffer()
-        await pc.setLocalDescription(offer)
+async def offer(request):
+    offer = await pc.createOffer()
+    await pc.setLocalDescription(offer)
+    return web.json_response({
+        "sdp": pc.localDescription.sdp,
+        "type": pc.localDescription.type
+    })
 
-        async with session.post(f"http://{server_ip}:8080/offer", json={
-            "sdp": pc.localDescription.sdp,
-            "type": pc.localDescription.type
-        }) as resp:
-            answer = await resp.json()
+async def answer(request):
+    data = await request.json()
+    await pc.setRemoteDescription(
+        RTCSessionDescription(data["sdp"], data["type"])
+    )
+    return web.Response(text="OK")
 
-        await pc.setRemoteDescription(
-            RTCSessionDescription(answer["sdp"], answer["type"])
-        )
+app = web.Application()
+app.router.add_get("/offer", offer)
+app.router.add_post("/answer", answer)
 
-asyncio.get_event_loop().run_until_complete(main())
-asyncio.get_event_loop().run_forever()
+web.run_app(app, port=8080)
