@@ -1,14 +1,19 @@
 import asyncio
 import json
 from aiohttp import web
-from aiortc import RTCPeerConnection, RTCSessionDescription, RTCConfiguration, RTCIceServer
+from aiortc import RTCPeerConnection, RTCDataChannel, RTCConfiguration, RTCIceServer, RTCSessionDescription
 
-# Use a STUN server for NAT traversal
-pc = RTCPeerConnection(
-    configuration=RTCConfiguration(
-        iceServers=[RTCIceServer(urls="stun:stun.l.google.com:19302")]
+# TURN + STUN servers
+ice_servers = [
+    RTCIceServer(urls="stun:stun.l.google.com:19302"),
+    RTCIceServer(
+        urls="turn:openrelay.metered.ca:443?transport=tcp",
+        username="openrelayproject",
+        credential="openrelayproject"
     )
-)
+]
+
+pc = RTCPeerConnection(RTCConfiguration(iceServers=ice_servers))
 
 @pc.on("datachannel")
 def on_datachannel(channel):
@@ -19,7 +24,7 @@ def on_datachannel(channel):
         # Echo back immediately
         channel.send(message)
 
-# HTTP signaling endpoints
+# HTTP signaling endpoint
 async def offer(request):
     data = await request.json()
     offer = RTCSessionDescription(sdp=data["sdp"], type=data["type"])
@@ -35,5 +40,5 @@ async def offer(request):
 app = web.Application()
 app.router.add_post("/offer", offer)
 
-# Run server on all interfaces so laptop can reach
+# Listen on all interfaces
 web.run_app(app, host="0.0.0.0", port=8080)
