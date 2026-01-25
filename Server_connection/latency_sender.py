@@ -2,19 +2,14 @@ import asyncio
 import json
 import time
 from aiohttp import ClientSession
-from aiortc import RTCPeerConnection, RTCConfiguration, RTCIceServer, RTCSessionDescription
+from aiortc import RTCPeerConnection, RTCDataChannel, RTCConfiguration, RTCIceServer, RTCSessionDescription
 
-# TURN + STUN
-ice_servers = [
-    RTCIceServer(urls="stun:stun.l.google.com:19302"),
-    RTCIceServer(
-        urls="turn:openrelay.metered.ca:443?transport=tcp",
-        username="openrelayproject",
-        credential="openrelayproject"
+# STUN server config
+pc = RTCPeerConnection(
+    configuration=RTCConfiguration(
+        iceServers=[RTCIceServer(urls="stun:stun.l.google.com:19302")]
     )
-]
-
-pc = RTCPeerConnection(RTCConfiguration(iceServers=ice_servers))
+)
 
 channel = pc.createDataChannel(
     "latency",
@@ -27,7 +22,8 @@ async def on_open():
     print("Latency channel open. Starting pings...")
     while True:
         t0 = time.time()
-        channel.send(json.dumps({"t0": t0}))
+        msg = json.dumps({"t0": t0})
+        channel.send(msg)
         await asyncio.sleep(0.1)  # 10 Hz ping
 
 @channel.on("message")
@@ -38,8 +34,9 @@ def on_message(message):
     print(f"RTT: {rtt:.2f} ms | One-way ≈ {rtt/2:.2f} ms")
 
 async def main():
-    server_ip = "SERVER_PUBLIC_OR_LAN_IP"  # Receiver’s IP visible to your laptop
+    server_ip = "192.168.68.59" # <-- Replace with your server's LAN IP
     async with ClientSession() as session:
+        # Send initial offer
         offer = await pc.createOffer()
         await pc.setLocalDescription(offer)
 
